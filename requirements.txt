@@ -1,0 +1,8 @@
+flask-api
+keras
+matplotlib
+numpy
+pandas
+seaborn
+sklearn
+# tensorflow or tensorflow-gpu

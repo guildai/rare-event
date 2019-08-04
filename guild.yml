@@ -1,0 +1,228 @@
+- model: rare-ae
+  description: Rare event autoencoder classifier
+  references:
+    - https://towardsdatascience.com/extreme-rare-event-classification-using-autoencoders-in-keras-a565b386f098
+  extends:
+    - serve-support
+  params:
+    serve-model-op: rare-ae:train
+  operations:
+    train:
+      description: Train a rare event AE classifier
+      main: train_ae
+      requires:
+        - operation: prepare-data
+          select: data
+      flags:
+        epochs:
+          description: Number of epochs to train
+          default: 1000
+          arg-name: nb_epoch
+        val_split:
+          description: Percent as float of validation data
+          default: 0.2
+          arg-name: DATA_SPLIT_PCT
+        batch_size:
+          description: Training batch size
+          default: 512
+          arg-name: batch_size
+        lr:
+          decription: Learning rate
+          default: 1e-5
+          arg-name: learning_rate
+        threshold:
+          description: Prediction error (MSE) threshold for positive classification
+          default: 0.4
+          arg-name: threshold_fixed
+        patience:
+          description: Number of epochs with no improvement
+          default: 5
+        activation:
+          description: Activation layer type
+          default: relu
+          required: yes
+          choices:
+            - value: relu
+              description: Rectified linear unit
+            - value: leaky-relu
+              description: Leaky version of a rectified linear unit
+            - value: prelu
+              description: Parametric rectified linear unit
+            - value: threshold-relu
+              description: Thresholded rectified linear unit
+            - value: elu
+              description: Exponential linear unit
+            - value: selu
+              description: Scaled exponential linear unit
+            - value: tanh
+              description: Hyperbolic tangent activation function
+            - value: sigmoid
+              description: Sigmoid activation function
+            - value: hard_sigmoid
+              description: Hard sigmoid activation function
+            - value: linear
+              description: Linear (i.e. identity) activation function
+        encoder_hidden_layers:
+          description: Number of hidden layers in decoder
+          default: 1
+        decoder_hidden_layers:
+          description: Number of hidden layers in encoder
+          default: 1
+        optimizer:
+          description: Training optimizer
+          default: adam
+          choices:
+            - value: sgd
+              description: Stochastic gradient descent optimizer
+            - value: rmsprop
+              description: RMSProp optimizer
+            - value: adagrad
+              description: Adagrad optimizer
+            - value: adadelta
+              description: Adadelta optimizer
+            - value: adam
+              description: Adam optimizer
+            - value: adamax
+              description: Adamax optimizer
+            - value: nadam
+              description: Nesterov Adam optimizer
+        samples:
+          description: Number of X samples to generate
+          default: 50
+      flags-dest: globals
+      flags-import: no
+      objective:
+        maximize: roc_auc
+      output-scalars:
+        roc_auc: 'roc_auc: (.+)'
+      sourcecode:
+        - exclude: ['*.egg-info', build]
+
+- model: rare-lstm
+  description: Rare event LSTM classifier
+  references:
+    - https://towardsdatascience.com/lstm-autoencoder-for-extreme-rare-event-classification-in-keras-ce209a224cfb
+  extends:
+    - serve-support
+  params:
+    serve-model-op: rare-lstm:train
+  operations:
+    train:
+      description: Train a rare event LSTM classifier
+      main: train_lstm
+      requires:
+        - operation: prepare-data
+          select: data
+      flags:
+        epochs:
+          description: Number of epochs to train
+          default: 1000
+        val_split:
+          description: Percent as float of validation data
+          default: 0.2
+          arg-name: DATA_SPLIT_PCT
+        batch_size:
+          description: Training batch size
+          default: 128
+          arg-name: batch
+        lr:
+          decription: Learning rate
+          default: 1e-3
+        patience:
+          description: Number of epochs with no improvement
+          default: 5
+        lookback:
+          description: How far back LSTM looks
+          default: 5
+        threshold:
+          description: Prediction error (MSE) threshold for positive classification
+          default: 0.4
+          arg-name: threshold_fixed
+        samples:
+          description: Number of X samples to generate
+          default: 50
+      flags-import: no
+      flags-dest: globals
+      objective:
+        maximize: roc_auc
+      output-scalars:
+        roc_auc: 'roc_auc: (.+)'
+      sourcecode:
+        - exclude: ['*.egg-info', build]
+
+- model: ''
+  operations:
+    prepare-data:
+      description: Prepare rare event data for training
+      main: prepare_data
+      flags:
+        shift:
+          description: Number of places to time-shift X and Y
+          default: 2
+      flags-import: no
+      flags-dest: globals
+      requires:
+        - file: data.zip
+          sha256: af30a297dfddd83f2c26b191caa47f6f1c7ec5d930ee54dfd3d75731c96809ed
+          path: data
+          rename:
+            - pattern: 'processminer-rare-event-mts - data.csv'
+              repl: rare-events-raw.csv
+    deploy-best-model:
+      description:
+        Deploy the best trained model for a specified label
+
+        If label is not specified, evaluates all trained models.
+      main: deploy
+      flags:
+        label:
+          description: The label used to select candidate models
+          null-label: any
+        output:
+          description: Directory to deploy the selected model to
+          null-label: temp directory (generated)
+      flags-import: no
+
+    ae-search:
+      description: Train rare-ae with varied time shifts
+      flags:
+        shift: 2
+      steps:
+        - run: prepare-data
+          flags:
+            - shift=${shift}
+        - run: rare-ae:train
+      objective:
+        maximize: roc_auc
+
+    end-to-end:
+      description: Train end-to-end
+      steps:
+        - prepare-data
+        - rare-ae:train
+        - rare-lstm:train
+        - deploy-best-model
+
+- config: serve-support
+  operations:
+    serve:
+      description: Serves latest trained model
+      main: serve
+      requires:
+        - operation: '{{serve-model-op}}'
+          select: checkpoints
+      flags-import: [port, host, threshold, debug]
+      flags:
+        debug: yes
+
+- package: appian-rare
+  requires:
+    - tensorflow-gpu==1.14.0
+    - keras
+    - matplotlib
+    - numpy
+    - pandas
+    - seaborn
+    - sklearn
+  data-files:
+    - data.zip
