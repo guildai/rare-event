@@ -6,6 +6,7 @@
     - serve-support
   params:
     serve-model-op: rare-ae:train
+  disable-plugins: gpu
   operations:
     train:
       description: Train a rare event AE classifier
@@ -106,6 +107,7 @@
     - serve-support
   params:
     serve-model-op: rare-lstm:train
+  disable-plugins: gpu
   operations:
     train:
       description: Train a rare event LSTM classifier
@@ -216,13 +218,5 @@
         debug: yes
 
 - package: appian-rare
-  requires:
-    - tensorflow-gpu==1.14.0
-    - keras
-    - matplotlib
-    - numpy
-    - pandas
-    - seaborn
-    - sklearn
   data-files:
     - data.zip
