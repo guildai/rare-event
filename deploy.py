@@ -10,30 +10,30 @@ from guild import ipy as guild
 def main():
     args = _init_args()
     runs = _compare_runs(args)
-    _print_runs(runs)
+    _save_runs(runs, args)
     best_run = _find_best_run(runs)
     _deploy(best_run, args)
 
 def _init_args():
     p = argparse.ArgumentParser()
     p.add_argument("--label")
-    p.add_argument("--output")
+    p.add_argument("--output", default=".")
     return p.parse_args()
 
 def _compare_runs(args):
     labels = [args.label] if args.label else None
-    runs = guild.runs(labels=labels, operations=["train"])
+    runs = guild.runs(
+        labels=labels,
+        operations=["train"],
+        completed=True,
+        terminated=True)
     if runs.empty:
         match_desc = " match '%s'" % labels[0] if labels else " to compare"
         raise SystemExit("no training runs%s" % match_desc)
     return runs.compare()
 
-def _print_runs(runs):
-    import pandas as pd
-    with pd.option_context(
-            "display.max_rows", 9999,
-            "display.max_columns", 9999):
-        print(runs)
+def _save_runs(runs, args):
+    runs.to_csv(os.path.join(args.output, "runs.csv"))
 
 def _find_best_run(runs):
     best_val = 0.0
@@ -47,11 +47,10 @@ def _find_best_run(runs):
     return best_run
 
 def _deploy(run, args):
-    output = args.output
-    if not output:
-        output = tempfile.mkdtemp(prefix="rare-best-model-")
+    output = os.path.abspath(args.output)
     print("Deploying %s to %s" % (run.id, output))
     shutil.copytree(run.path, os.path.join(output, run.id))
+    os.symlink(run.id, os.path.join(output, "best-run"))
 
 if __name__ == "__main__":
     main()

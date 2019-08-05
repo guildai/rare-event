@@ -182,7 +182,7 @@
           null-label: any
         output:
           description: Directory to deploy the selected model to
-          null-label: temp directory (generated)
+          null-label: run directory (default)
       flags-import: no
 
     ae-search:
